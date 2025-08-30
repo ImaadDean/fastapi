@@ -55,21 +55,24 @@ jobs:
             git clone https://github.com/${{ github.repository }} .
           fi
           
-          # Ensure pip is available
-          if ! command -v pip3 &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y python3-pip
+          # Ensure required packages are available
+          sudo apt-get update
+          sudo apt-get install -y python3-pip python3-venv python3-full
+          
+          # Create virtual environment if it doesn't exist
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
           fi
           
-          # Install/update dependencies
-          pip3 install --user -r requirements.txt
+          # Activate virtual environment and install dependencies
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
           
           # Stop existing service (if running)
           pkill -f "uvicorn main:app" || true
           
-          # Start the FastAPI application with proper PATH
-          export PATH=$PATH:/home/${{ secrets.SERVER_USERNAME }}/.local/bin
-          nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+          nohup venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
           
           # Wait a moment and check if service started
           sleep 5
