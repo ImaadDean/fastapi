@@ -1,16 +1,8 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import pywhatkit as pwk
 from datetime import datetime, timedelta
 import time
 import os
-
-try:
-    import pywhatkit as pwk
-    WHATSAPP_AVAILABLE = True
-except (ImportError, KeyError):
-    WHATSAPP_AVAILABLE = False
-    pwk = None
 
 app = FastAPI(title="Hello API", version="1.0.0")
 
@@ -33,7 +25,9 @@ def health_check():
 
 @app.post("/send-whatsapp")
 def send_whatsapp_message(message_data: WhatsAppMessage):
-    if not WHATSAPP_AVAILABLE:
+    try:
+        import pywhatkit as pwk
+    except (ImportError, KeyError):
         raise HTTPException(status_code=503, detail="WhatsApp functionality not available in this environment")
     
     try:
@@ -69,7 +63,9 @@ def send_whatsapp_message(message_data: WhatsAppMessage):
 
 @app.post("/send-whatsapp-now")
 def send_whatsapp_now(message_data: WhatsAppMessage):
-    if not WHATSAPP_AVAILABLE:
+    try:
+        import pywhatkit as pwk
+    except (ImportError, KeyError):
         raise HTTPException(status_code=503, detail="WhatsApp functionality not available in this environment")
     
     try:
