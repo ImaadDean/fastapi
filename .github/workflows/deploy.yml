@@ -69,19 +69,35 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           
-          # Stop existing service (if running)
-          pkill -f "uvicorn main:app" || true
+          sudo tee /etc/systemd/system/fastapi-app.service > /dev/null <<EOF
+          [Unit]
+          Description=FastAPI application
+          After=network.target
           
-          nohup venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+          [Service]
+          Type=exec
+          User=${{ secrets.SERVER_USERNAME }}
+          WorkingDirectory=/home/${{ secrets.SERVER_USERNAME }}/fastapi-app
+          Environment=PATH=/home/${{ secrets.SERVER_USERNAME }}/fastapi-app/venv/bin
+          ExecStart=/home/${{ secrets.SERVER_USERNAME }}/fastapi-app/venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+          Restart=always
+          RestartSec=3
           
-          # Wait a moment and check if service started
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+          
+          sudo systemctl daemon-reload
+          sudo systemctl enable fastapi-app
+          sudo systemctl restart fastapi-app
+          
           sleep 5
-          if pgrep -f "uvicorn main:app" > /dev/null; then
+          if sudo systemctl is-active --quiet fastapi-app; then
             echo "FastAPI application started successfully"
             sleep 2
-            curl -f http://localhost:8000/health || echo "Warning: Health check failed"
+            curl -f http://localhost:8000/hello || echo "Warning: Health check failed"
           else
             echo "Failed to start FastAPI application"
-            cat app.log
+            sudo systemctl status fastapi-app
             exit 1
           fi
