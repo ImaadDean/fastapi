@@ -1,0 +1,73 @@
+name: Deploy FastAPI to Server
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest httpx
+    
+    - name: Test with pytest
+      run: |
+        pytest test_main.py -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        port: 22
+        script: |
+          # Navigate to app directory
+          cd /home/${{ secrets.SERVER_USERNAME }}/fastapi-app || mkdir -p /home/${{ secrets.SERVER_USERNAME }}/fastapi-app && cd /home/${{ secrets.SERVER_USERNAME }}/fastapi-app
+          
+          # Pull latest code
+          if [ -d ".git" ]; then
+            git pull origin main
+          else
+            git clone https://github.com/${{ github.repository }} .
+          fi
+          
+          # Install/update dependencies
+          python3 -m pip install --user -r requirements.txt
+          
+          # Stop existing service (if running)
+          pkill -f "uvicorn main:app" || true
+          
+          # Start the FastAPI application
+          nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
+          
+          # Wait a moment and check if service started
+          sleep 3
+          if pgrep -f "uvicorn main:app" > /dev/null; then
+            echo "FastAPI application started successfully"
+          else
+            echo "Failed to start FastAPI application"
+            exit 1
+          fi
