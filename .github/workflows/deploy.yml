@@ -44,8 +44,9 @@ jobs:
         key: ${{ secrets.SSH_PRIVATE_KEY }}
         port: 22
         script: |
-          # Navigate to app directory
-          cd /home/${{ secrets.SERVER_USERNAME }}/fastapi-app || mkdir -p /home/${{ secrets.SERVER_USERNAME }}/fastapi-app && cd /home/${{ secrets.SERVER_USERNAME }}/fastapi-app
+          # Create app directory if it doesn't exist
+          mkdir -p /home/${{ secrets.SERVER_USERNAME }}/fastapi-app
+          cd /home/${{ secrets.SERVER_USERNAME }}/fastapi-app
           
           # Pull latest code
           if [ -d ".git" ]; then
@@ -54,20 +55,30 @@ jobs:
             git clone https://github.com/${{ github.repository }} .
           fi
           
+          # Ensure pip is available
+          if ! command -v pip3 &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y python3-pip
+          fi
+          
           # Install/update dependencies
-          python3 -m pip install --user -r requirements.txt
+          pip3 install --user -r requirements.txt
           
           # Stop existing service (if running)
           pkill -f "uvicorn main:app" || true
           
-          # Start the FastAPI application
+          # Start the FastAPI application with proper PATH
+          export PATH=$PATH:/home/${{ secrets.SERVER_USERNAME }}/.local/bin
           nohup python3 -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload > app.log 2>&1 &
           
           # Wait a moment and check if service started
-          sleep 3
+          sleep 5
           if pgrep -f "uvicorn main:app" > /dev/null; then
             echo "FastAPI application started successfully"
+            sleep 2
+            curl -f http://localhost:8000/health || echo "Warning: Health check failed"
           else
             echo "Failed to start FastAPI application"
+            cat app.log
             exit 1
           fi
